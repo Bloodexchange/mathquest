@@ -1,0 +1,27 @@
+{
+  "name": "mathquest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build.mjs && node scripts/migrate.mjs",
+    "migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "build:static": "node scripts/build.mjs",
+    "setup:developer": "node --env-file=.env.local scripts/setup-developer.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "ai": "^7.0.166",
+    "better-auth": "^1.7.18",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "vercel": "^65.12.1"
+  }
+}

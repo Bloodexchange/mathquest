@@ -1,0 +1,27 @@
+const $=id=>document.getElementById(id);let data=null,target=null,loading=false,mutating=false;
+async function api(url,body){const r=await fetch(url,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Object.assign(new Error(d.error||d.message||'Ошибка сервера'),{status:r.status});return d;}
+const date=value=>new Date(value).toLocaleString('ru-RU');
+const node=(tag,text,className)=>{const e=document.createElement(tag);e.textContent=text;if(className)e.className=className;return e;};
+function controls(p){const wrap=node('div','', 'admin-actions');if(p.developer){wrap.append(node('span','Разработчик','tag'));return wrap;}
+ const ban=node('button',p.ban?'Изменить блокировку':'Заблокировать','secondary');ban.onclick=()=>{target=p;$('banTitle').textContent=p.name;$('banForm').reset();$('customLabel').hidden=true;$('customMinutes').required=false;$('banError').textContent='';$('banDialog').showModal();};wrap.append(ban);
+ if(p.ban){const unban=node('button','Снять блокировку','text-button');unban.onclick=async()=>{if(mutating)return;mutating=true;unban.disabled=true;try{data=await api('/api/moderation',{action:'unban',userId:p.id});render();$('message').textContent='Блокировка снята.';}catch(e){$('message').textContent=e.message;}finally{mutating=false;unban.disabled=false;}};wrap.append(unban);}return wrap;
+}
+function playerRow(p,description){const row=node('article','','admin-row');const info=node('div','');info.append(node('strong',p.name),node('small',p.email),node('p',description));row.append(info,controls(p));return row;}
+function empty(container,text){if(!container.children.length)container.append(node('p',text,'empty-state'));}
+function render(){
+ const banned=data.players.filter(p=>p.ban).length,reports=data.incidents.filter(i=>i.seconds>=180).length;
+ $('stats').replaceChildren(...[`${data.players.length} игроков`,`${reports} событий от 3 минут`,`${banned} блокировок`].map(t=>node('div',t,'stat-card')));
+ const query=$('search').value.trim().toLocaleLowerCase();$('players').replaceChildren();
+ for(const p of data.players.filter(p=>(p.name+' '+p.email).toLocaleLowerCase().includes(query))){$('players').append(playerRow(p,p.ban?`Блокировка ${p.ban.expires_at?'до '+date(p.ban.expires_at):'навсегда'}. Причина: ${p.ban.reason}`:`Доступ открыт · Уровень ${p.level||'ещё не начат'}`));}empty($('players'),'Игроки не найдены.');
+ $('incidents').replaceChildren();for(const i of data.incidents){const p=data.players.find(p=>p.id===i.user_id);if(!p)continue;const row=playerRow(p,`${i.seconds>=180?'На проверку':'Предупреждение'} · ${Math.floor(i.seconds/60)} мин ${i.seconds%60} с · ${date(i.started_at)} · ${i.ended_at?'вернулся':'возврат не зафиксирован'}`);row.classList.add(i.seconds>=180?'incident-report':'incident-warning');$('incidents').append(row);}empty($('incidents'),'Пока нет отсутствий дольше 2 минут.');
+ $('history').replaceChildren(...data.history.map(b=>{const row=node('article','','admin-row');const info=node('div','');info.append(node('strong',b.name),node('p',b.reason),node('small',`${date(b.created_at)} · ${b.expires_at?'до '+date(b.expires_at):'навсегда'} · ${b.revoked_at?'снята':b.expires_at&&new Date(b.expires_at)<new Date()?'истекла':'действует'}`));row.append(info);return row;}));empty($('history'),'Блокировок пока нет.');
+ $('syncTime').textContent='Обновлено: '+new Date().toLocaleTimeString('ru-RU')+' · Автообновление каждые 15 секунд';
+}
+async function load(){if(loading||mutating)return;loading=true;$('refresh').disabled=true;try{data=await api('/api/moderation');$('login').hidden=true;$('dashboard').hidden=false;$('logout').hidden=false;$('message').textContent='';render();}catch(e){$('message').textContent=e.message;if(e.status===401||e.status===403){data=null;$('dashboard').hidden=true;$('login').hidden=false;$('logout').hidden=e.status===401;}}finally{loading=false;$('refresh').disabled=false;}}
+ $('loginForm').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const f=new FormData(e.target);try{await api('/api/auth/sign-in/email',{email:f.get('email'),password:f.get('password')});e.target.reset();await load();}catch(e){$('message').textContent=e.message;}finally{button.disabled=false;}};
+ $('logout').onclick=async()=>{try{await api('/api/auth/sign-out',{});data=null;$('dashboard').hidden=true;$('login').hidden=false;$('logout').hidden=true;}catch(e){$('message').textContent=e.message;}};
+ $('search').oninput=()=>{if(data)render();};$('refresh').onclick=load;
+ $('duration').onchange=()=>{$('customLabel').hidden=$('duration').value!=='custom';$('customMinutes').required=!$('customLabel').hidden;};
+ $('closeBan').onclick=$('cancelBan').onclick=()=>$('banDialog').close();
+ $('banForm').onsubmit=async e=>{e.preventDefault();if(mutating)return;mutating=true;$('saveBan').disabled=true;$('banError').textContent='';try{const duration=$('duration').value;data=await api('/api/moderation',{action:'ban',userId:target.id,reason:$('reason').value,minutes:duration==='forever'?null:Number(duration==='custom'?$('customMinutes').value:duration)});$('banDialog').close();render();$('message').textContent='Блокировка сохранена.';}catch(e){$('banError').textContent=e.message;}finally{mutating=false;$('saveBan').disabled=false;}};
+load();setInterval(()=>{if(data&&!document.hidden&&!$('banDialog').open)load();},15000);
